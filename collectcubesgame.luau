@@ -1,3 +1,5 @@
+
+--game https://www.roblox.com/games/120478234699686/Collect-All-Cubes
 local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
 
 local Window = SimpleLib:Window("cube game")

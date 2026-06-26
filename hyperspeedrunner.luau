@@ -2,7 +2,7 @@
 
 local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
 
-local win = SimpleLib:Window("cash tp")
+local win = SimpleLib:Window("hyperspedrunner game scriot")
 local main = win:AddSection("main")
 
 local doing = false

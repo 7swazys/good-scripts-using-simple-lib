@@ -17,7 +17,7 @@ local function go()
     end
 end
 
-main:Toggle("toggle", false, function(v)
+main:Toggle("auto win", false, function(v)
     doing = v
     if doing then
         spawn(function()

@@ -1,0 +1,86 @@
+local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
+
+local win = SimpleLib:Window("touch")
+local main = win:AddSection("main")
+
+local doing = false
+local waitTime = 0.5
+
+local function fireTouch()
+    local plr = game:GetService("Players").LocalPlayer
+    if not plr.Character then return end
+    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    pcall(function()
+        root.CFrame = CFrame.new(960, -71, -9882)
+        task.wait(0.2)
+    end)
+
+    local giveWins = workspace:FindFirstChild("GiveWins")
+    if not giveWins then return end
+
+    local children = giveWins:GetChildren()
+    local target = children[17]
+    if not target then return end
+
+    local touch = target:FindFirstChild("Touch")
+    if not touch then return end
+
+    local ti = touch:FindFirstChild("TouchInterest")
+    if not ti then return end
+
+    pcall(function()
+        firetouchinterest(root, ti.Parent, 0)
+        task.wait(0.1)
+        firetouchinterest(root, ti.Parent, 1)
+    end)
+end
+
+main:Toggle("toggle", false, function(v)
+    doing = v
+    if doing then
+        spawn(function()
+            while doing do
+                fireTouch()
+                task.wait(waitTime)
+            end
+        end)
+    end
+end)
+
+main:Slider("slider", 0.05, 2, 0.5, function(v)
+    waitTime = v
+end)
+
+local spiderDelay = 0.3
+
+local positions = {
+    CFrame.new(1001, -69, -3533),
+    CFrame.new(987, -69, -3533),
+    CFrame.new(962, -69, -3533),
+    CFrame.new(949, -69, -3533),
+    CFrame.new(1009, -55, -3502),
+    CFrame.new(983, -55, -3500),
+    CFrame.new(972, -55, -3500),
+    CFrame.new(956, -55, -3500),
+    CFrame.new(943, -55, -3500)
+}
+
+main:Button("auto spider", function()
+    local plr = game:GetService("Players").LocalPlayer
+    if not plr.Character then return end
+    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    for i = 1, #positions do
+        pcall(function()
+            root.CFrame = positions[i]
+            task.wait(spiderDelay)
+        end)
+    end
+end)
+
+main:Slider("spider delay", 0.05, 2, 0.3, function(v)
+    spiderDelay = v
+end)

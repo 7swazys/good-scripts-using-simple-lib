@@ -1,4 +1,5 @@
--- THIS ISNT AS OP OK? I WA SBORED also im too  lazy to add a readme so figure it outurselfs lol.. man im tired blehhhh :P
+-- THIS ISNT AS OP OK? I WA SBORED also im too  lazy to add a readme so figure it outurselfs lol.. man im tired blehhhh :P 
+--sum dumbass kid asked for script while i was mid progress and forced me to release it earleir
 local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
 
 local Window = SimpleLib:Window("punch wall game thing")

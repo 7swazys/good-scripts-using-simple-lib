@@ -42,7 +42,7 @@ local function fireChoice()
     end
 end
 
-main:Toggle("toggle", false, function(v)
+main:Toggle("doesnt work (worked in tut idk why doesnt work here)", false, function(v)
     spamming = v
     if spamming then
         spawn(function()
@@ -70,7 +70,7 @@ main:Toggle("godmode", false, function(v)
     end
 end)
 
-main:Toggle("choice spam", false, function(v)
+main:Toggle("inf choices", false, function(v)
     choiceSpam = v
     if choiceSpam then
         spawn(function()

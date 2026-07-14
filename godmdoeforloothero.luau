@@ -1,6 +1,6 @@
 local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
 
-local win = SimpleLib:Window("money")
+local win = SimpleLib:Window("ts2funnylol")
 local main = win:AddSection("main")
 
 local spamming = false

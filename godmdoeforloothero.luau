@@ -1,14 +1,17 @@
 local SimpleLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/IcantAffordSynapse/SimpleLib/refs/heads/main/SimpleLib.lua"))()
 
-local win = SimpleLib:Window("godmodelol")
+local win = SimpleLib:Window("money")
 local main = win:AddSection("main")
 
 local spamming = false
 local delayTime = 0.1
 local godmode = false
+local choiceSpam = false
 
 local types = {"Gold", "Amethyst", "Sapphire"}
 local currentType = 1
+local choices = {"Spades", "Trident", "Meteor", "Darkflame"}
+local currentChoice = 1
 
 local function fireMoney()
     local ev = game:GetService("ReplicatedStorage").Remotes.Money
@@ -25,6 +28,16 @@ local function fireHeal()
     if ev then
         pcall(function()
             ev:FireServer()
+        end)
+    end
+end
+
+local function fireChoice()
+    local ev = game:GetService("ReplicatedStorage").Remotes.Choice
+    if ev then
+        pcall(function()
+            ev:FireServer(choices[currentChoice])
+            currentChoice = currentChoice % #choices + 1
         end)
     end
 end
@@ -51,6 +64,18 @@ main:Toggle("godmode", false, function(v)
         spawn(function()
             while godmode do
                 fireHeal()
+                task.wait(0.05)
+            end
+        end)
+    end
+end)
+
+main:Toggle("choice spam", false, function(v)
+    choiceSpam = v
+    if choiceSpam then
+        spawn(function()
+            while choiceSpam do
+                fireChoice()
                 task.wait(0.05)
             end
         end)

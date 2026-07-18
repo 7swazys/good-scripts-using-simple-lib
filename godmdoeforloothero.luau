@@ -6,12 +6,34 @@ local main = win:AddSection("main")
 local spamming = false
 local delayTime = 0.1
 local godmode = false
-local choiceSpam = false
+local infChoices = false
 
 local types = {"Gold", "Amethyst", "Sapphire"}
 local currentType = 1
-local choices = {"Spades", "Trident", "Meteor", "Darkflame"}
-local currentChoice = 1
+
+local defaultChoices = {"Spades", "Trident", "Meteor", "Darkflame", "Tornado", "Bullet", "Anchor", "Toxin", "Giant", "Tower", "Nimble", "Skull", "Venom", "Rocket", "Ammo", "Knight", "Bandage", "Target", "Storm", "Apple", "Dice", "Arrows"}
+local configFile = "LootHeroConfig.txt"
+
+local function loadConfig()
+    if not isfile then return defaultChoices end
+    if not isfile(configFile) then
+        writefile(configFile, table.concat(defaultChoices, ","))
+        return defaultChoices
+    end
+    local content = readfile(configFile)
+    if content == "" then return defaultChoices end
+    local choices = {}
+    for _, name in pairs(string.split(content, ",")) do
+        local trimmed = name:gsub("^%s*(.-)%s*$", "%1")
+        if trimmed ~= "" then
+            table.insert(choices, trimmed)
+        end
+    end
+    if #choices == 0 then return defaultChoices end
+    return choices
+end
+
+local allChoices = loadConfig()
 
 local function fireMoney()
     local ev = game:GetService("ReplicatedStorage").Remotes.Money
@@ -32,17 +54,16 @@ local function fireHeal()
     end
 end
 
-local function fireChoice()
+local function fireChoice(choice)
     local ev = game:GetService("ReplicatedStorage").Remotes.Choice
     if ev then
         pcall(function()
-            ev:FireServer(choices[currentChoice])
-            currentChoice = currentChoice % #choices + 1
+            ev:FireServer(choice)
         end)
     end
 end
 
-main:Toggle("doesnt work (worked in tut idk why doesnt work here)", false, function(v)
+main:Toggle("toggle", false, function(v)
     spamming = v
     if spamming then
         spawn(function()
@@ -71,13 +92,33 @@ main:Toggle("godmode", false, function(v)
 end)
 
 main:Toggle("inf choices", false, function(v)
-    choiceSpam = v
-    if choiceSpam then
+    infChoices = v
+    if infChoices then
         spawn(function()
-            while choiceSpam do
-                fireChoice()
+            local idx = 1
+            while infChoices do
+                fireChoice(allChoices[idx])
+                idx = idx % #allChoices + 1
                 task.wait(0.05)
             end
         end)
+    end
+end)
+
+main:TextBox("edit config (comma separated)", 1, function(v)
+    if v and v ~= "" then
+        local newChoices = {}
+        for _, name in pairs(string.split(v, ",")) do
+            local trimmed = name:gsub("^%s*(.-)%s*$", "%1")
+            if trimmed ~= "" then
+                table.insert(newChoices, trimmed)
+            end
+        end
+        if #newChoices > 0 then
+            allChoices = newChoices
+            if isfile then
+                writefile(configFile, table.concat(newChoices, ","))
+            end
+        end
     end
 end)

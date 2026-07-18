@@ -11,7 +11,7 @@ local infChoices = false
 local types = {"Gold", "Amethyst", "Sapphire"}
 local currentType = 1
 
-local defaultChoices = {"Spades", "Trident", "Meteor", "Darkflame", "Tornado", "Bullet", "Anchor", "Toxin", "Giant", "Tower", "Nimble", "Skull", "Venom", "Rocket", "Ammo", "Knight", "Bandage", "Target", "Storm", "Apple", "Dice", "Arrows"}
+local defaultChoices = {"Spades", "Trident", "Meteor", "Darkflame", "Tornado", "Bullet", "Anchor", "Toxin", "Giant", "Tower", "Nimble", "Skull", "Venom", "Rocket", "Ammo", "Knight", "Bandage", "Target", "Storm", "Apple", "Dice", "Arrows", "Bloodlust"}
 local configFile = "LootHeroConfig.txt"
 
 local function loadConfig()

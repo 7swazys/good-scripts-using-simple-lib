@@ -83,3 +83,4 @@ mainTab:Toggle("spawn bit", false, function(state)
         spawn(loopSpawn)
     end
 end)
+print("i hate my life")

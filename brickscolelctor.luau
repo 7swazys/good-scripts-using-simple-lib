@@ -43,13 +43,13 @@ local function loopSpawn()
     while isSpawnLooping do
         firesignal(event.OnClientEvent, 
             "Yellow Sparkle Time bit",
-            CFrame.new(7, 16, -68)
+            CFrame.new(-0, 15, -120)
         )
         task.wait(0.1)
     end
 end
 
-mainTab:Toggle("loop invoke", false, function(state)
+mainTab:Toggle("give bits", false, function(state)
     isLooping = state
     if state then
         spawn(loopInvoke)

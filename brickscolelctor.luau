@@ -23,7 +23,7 @@ local function loopInvoke()
     if not remote then return end
     
     while isLooping do
-        remote:InvokeServer("Radioactive bit")
+        remote:InvokeServer("Unknown bit")
         task.wait(0.01)
     end
 end

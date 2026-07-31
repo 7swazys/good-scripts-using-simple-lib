@@ -1,4 +1,3 @@
-
 -- fuck the games leaderboards up
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -11,13 +10,21 @@ local isLooping = false
 local isUpgradeLooping = false
 local isSpawnLooping = false
 
+local event = replicatedStorage:FindFirstChild("SpawnBit")
+local bitNames = {}
+for _, bit in ipairs(workspace.Bits:GetChildren()) do
+    if bit.Name ~= "ZZZZZZZ" then
+        table.insert(bitNames, bit.Name)
+    end
+end
+
 local function loopInvoke()
     local remote = replicatedStorage:FindFirstChild("GetBitValue")
     if not remote then return end
     
     while isLooping do
-        remote:InvokeServer("Yellow Sparkle Time bit")
-        task.wait(0.1)
+        remote:InvokeServer("Radioactive bit")
+        task.wait(0.01)
     end
 end
 
@@ -37,15 +44,22 @@ local function loopUpgrade()
 end
 
 local function loopSpawn()
-    local event = replicatedStorage:FindFirstChild("SpawnBit")
     if not event then return end
+    local index = 1
     
     while isSpawnLooping do
-        firesignal(event.OnClientEvent, 
-            "Yellow Sparkle Time bit",
-            CFrame.new(-0, 15, -120)
-        )
-        task.wait(0.1)
+        local bitName = bitNames[index]
+        if bitName then
+            firesignal(event.OnClientEvent, 
+                bitName,
+                CFrame.new(-0, 15, -120)
+            )
+        end
+        index = index + 1
+        if index > #bitNames then
+            index = 1
+        end
+        task.wait(0.01)
     end
 end
 

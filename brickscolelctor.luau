@@ -23,7 +23,7 @@ local function loopInvoke()
     if not remote then return end
     
     while isLooping do
-        remote:InvokeServer("Unknown bit")
+        remote:InvokeServer("BlackIron Bit")
         task.wait(0.01)
     end
 end
@@ -31,6 +31,7 @@ end
 local function loopUpgrade()
     local multiplier = replicatedStorage:FindFirstChild("BuyMultiplierUpgrade")
     local speed = replicatedStorage:FindFirstChild("BuySpeedUpgrade")
+    local brickspeed = replicatedStorage:FindFirstChild("BuySpawnSpeedUpgrade")
     
     while isUpgradeLooping do
         if multiplier then
@@ -39,7 +40,10 @@ local function loopUpgrade()
         if speed then
             speed:InvokeServer()
         end
-        task.wait(0.1)
+        if brickspeed then
+            brickspeed:InvokeServer()
+        end
+        task.wait(0.01)
     end
 end
 
@@ -83,4 +87,3 @@ mainTab:Toggle("spawn bit", false, function(state)
         spawn(loopSpawn)
     end
 end)
-print("i hate my life")

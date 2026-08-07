@@ -23,10 +23,11 @@ local function loopInvoke()
     if not remote then return end
     
     while isLooping do
-        remote:InvokeServer("BlackIron Bit")
+        remote:InvokeServer("Unknown bit")
         task.wait(0.01)
     end
 end
+
 
 local function loopUpgrade()
     local multiplier = replicatedStorage:FindFirstChild("BuyMultiplierUpgrade")

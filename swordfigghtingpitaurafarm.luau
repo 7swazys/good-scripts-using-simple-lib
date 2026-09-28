@@ -1,12 +1,23 @@
+-- Luau — Roblox client script
+-- orbit autofarm. return-to-anchor uses direct per-frame CFrame writes
+-- on Heartbeat instead of TweenService, because the server overrides a
+-- client tween on a replicated character. per-frame writes look like
+-- teleport-stepping to the server, which it tolerates; a tween looks
+-- like one long invalid interpolation and gets dropped.
+--
+-- added a DEBUG flag. when true, prints every frame why the return did
+-- or did not advance. flip to false once the return is confirmed working.
 
 local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService  = game:GetService("UserInputService")
 local RunService        = game:GetService("RunService")
-local TweenService      = game:GetService("TweenService")
+local TeleportService   = game:GetService("TeleportService")
 
 local LocalPlayer  = Players.LocalPlayer
 local AttackRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attack")
+local RebirthRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Rebirth")
+
+local DEBUG = true
 
 -- zone
 local ZONE_CENTER = Vector3.new(-4, 2, -5)
@@ -16,14 +27,22 @@ local ZONE_RADIUS = 40
 local ORBIT_RADIUS = 6
 local ORBIT_SPEED  = 80
 
--- attack cadence
+-- attack
 local ATTACK_INTERVAL = 0.03
 local ATTACK_MIN      = 0.02
 
--- return tween
-local RETURN_TIME      = 0.8
-local RETURN_EASING    = Enum.EasingStyle.Quad
-local RETURN_DIRECTION = Enum.EasingDirection.Out
+-- return (now step-based, not tween)
+local RETURN_SPEED     = 60    -- studs/second while walking home
+local RETURN_SNAP_DIST = 0.5   -- studs; closer than this = arrived
+
+-- hop
+local HOP_EMPTY_SECONDS  = 15
+local HOP_CHECK_INTERVAL = 1
+local HOP_MAX_ATTEMPTS   = 5
+local HOP_RETRY_DELAY    = 3
+
+-- rebirth
+local REBIRTH_INTERVAL = 5
 
 -- exclusion
 local AVOID_PART_PATH = {"Map"}
@@ -33,13 +52,15 @@ local BODY_PADDING    = 3
 local MAX_PROBES      = 16
 local PROBE_STEP      = math.rad(22.5)
 
-local isAutofarming  = false
-local farmConnection = nil
-local attackThread   = nil
 local angle          = 0
 local lastPosition   = nil
 local currentTarget  = nil
-local returnTween    = nil
+local returning      = false
+local farmConnection = nil
+local attackThread   = nil
+local rebirthThread  = nil
+local hopThread      = nil
+local running        = true
 
 local avoidPart = nil
 local function resolveAvoidPart()
@@ -50,6 +71,9 @@ local function resolveAvoidPart()
     end
     avoidPart = node and node:FindFirstChild(AVOID_PART_NAME) or nil
     if avoidPart and not avoidPart:IsA("BasePart") then avoidPart = nil end
+    if DEBUG then
+        print("[Luis] avoidPart:", avoidPart and avoidPart:GetFullName() or "nil")
+    end
 end
 resolveAvoidPart()
 
@@ -87,6 +111,17 @@ local function inZone(hitbox)
     return d:Dot(d) <= ZONE_R2
 end
 
+local function isDead(target)
+    if not target then return true end
+    local hb = target.hitbox
+    if not hb or not hb.Parent then return true end
+    local folder = target.folder
+    if not folder or not folder.Parent then return true end
+    local humanoid = folder:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health <= 0 then return true end
+    return false
+end
+
 local function getZoneTargets()
     local container = workspace:FindFirstChild("PlayersContainer")
     if not container then return {} end
@@ -96,8 +131,14 @@ local function getZoneTargets()
         if folder.Name ~= LocalPlayer.Name then
             local hb = folder:FindFirstChild("Hitbox")
             if hb and hb:IsA("BasePart") and inZone(hb) then
-                local d = hb.Position - ZONE_CENTER
-                table.insert(out, { hitbox = hb, folder = folder, distSq = d:Dot(d) })
+                local humanoid = folder:FindFirstChildOfClass("Humanoid")
+                if not (humanoid and humanoid.Health <= 0) then
+                    local d = hb.Position - ZONE_CENTER
+                    table.insert(out, {
+                        hitbox = hb, folder = folder, name = folder.Name,
+                        distSq = d:Dot(d),
+                    })
+                end
             end
         end
     end
@@ -131,73 +172,108 @@ local function pickTarget(baseAngle)
     return nil
 end
 
-local function cancelReturn()
-    if returnTween then
-        returnTween:Cancel()
-        returnTween = nil
-    end
-end
+-- ---------- RETURN: direct per-frame step, no tween ----------
+--
+-- each Heartbeat moves the root a bounded distance toward ZONE_CENTER.
+-- position writes look like normal movement to the server, not a tween
+-- interpolation, so the server does not fight them.
+--
+-- the sweep gate only blocks a step that would cross MiddleMesh3. if the
+-- step is blocked, the character is nudged along the ring tangent instead
+-- of being frozen — that lets it walk around the mesh rather than stall.
 
-local function startReturn(myRoot)
-    if returnTween then return end
+local function stepReturn(myRoot, dt)
+    local pos = myRoot.Position
+    local toCenter = ZONE_CENTER - pos
+    local dist = toCenter.Magnitude
 
-    local from = myRoot.Position
-    if pointBlocked(ZONE_CENTER) then return end
-    if sweepBlocked(from, ZONE_CENTER) then return end
-
-    local goal = CFrame.new(ZONE_CENTER)
-    local tweenInfo = TweenInfo.new(
-        RETURN_TIME,
-        RETURN_EASING,
-        RETURN_DIRECTION
-    )
-
-    returnTween = TweenService:Create(myRoot, tweenInfo, { CFrame = goal })
-    returnTween.Completed:Connect(function()
-        returnTween = nil
+    if dist <= RETURN_SNAP_DIST then
+        myRoot.CFrame = CFrame.new(ZONE_CENTER)
         lastPosition = ZONE_CENTER
-        angle        = 0
-    end)
-    returnTween:Play()
+        angle = 0
+        returning = false
+        if DEBUG then print("[Luis] return: arrived") end
+        return
+    end
+
+    local dir = toCenter / dist
+    local maxStep = RETURN_SPEED * dt
+    local stepDist = math.min(maxStep, dist)
+    local target = pos + dir * stepDist
+
+    -- gate: if this step crosses the exclusion volume, deflect along
+    -- the tangent so the character walks around rather than stalling.
+    if pointBlocked(target) or sweepBlocked(pos, target) then
+        local tangent = Vector3.new(-dir.Z, 0, dir.X)
+        local side = (math.floor(angle / math.pi) % 2 == 0) and 1 or -1
+        local altTarget = pos + tangent * stepDist * side
+        if not pointBlocked(altTarget) and not sweepBlocked(pos, altTarget) then
+            target = altTarget
+            if DEBUG then print("[Luis] return: deflecting around mesh") end
+        else
+            if DEBUG then print("[Luis] return: blocked, holding") end
+            return
+        end
+    end
+
+    myRoot.CFrame = CFrame.new(target, target + dir)
+    lastPosition = target
 end
+
+-- ---------- orbit loop ----------
 
 local function startOrbitFarm()
     farmConnection = RunService.Heartbeat:Connect(function(dt)
+        if not running then return end
+
         local character = LocalPlayer.Character
         local myRoot    = character and character:FindFirstChild("HumanoidRootPart")
         if not myRoot then
-            cancelReturn()
+            if DEBUG then print("[Luis] no HumanoidRootPart this frame") end
             return
         end
 
         if not avoidPart then resolveAvoidPart() end
 
+        -- returning takes priority over orbit. do not fall through.
+        if returning then
+            stepReturn(myRoot, dt)
+            return
+        end
+
         angle = angle + (ORBIT_SPEED * dt)
 
-        if currentTarget then
-            local hb = currentTarget.hitbox
-            if not hb or not hb.Parent or not inZone(hb) then
-                currentTarget = nil
-            end
+        if currentTarget and isDead(currentTarget) then
+            if DEBUG then print("[Luis] target died, returning") end
+            currentTarget = nil
+            returning = true
+            return
+        end
+
+        if currentTarget and not inZone(currentTarget.hitbox) then
+            if DEBUG then print("[Luis] target left zone, returning") end
+            currentTarget = nil
+            returning = true
+            return
         end
 
         if not currentTarget then
             local chosen, chosenPos, chosenAngle = pickTarget(angle)
             if chosen then
-                cancelReturn()
+                if DEBUG then print("[Luis] acquired target:", chosen.name) end
                 currentTarget = chosen
                 angle         = chosenAngle
                 myRoot.CFrame = CFrame.new(chosenPos, chosen.hitbox.Position)
                 lastPosition  = chosenPos
-            else
-                startReturn(myRoot)
             end
             return
         end
 
         local pos, a = findSafeSlot(currentTarget.hitbox, angle, lastPosition)
         if not pos then
+            if DEBUG then print("[Luis] no safe orbit slot, returning") end
             currentTarget = nil
+            returning = true
             return
         end
 
@@ -207,16 +283,17 @@ local function startOrbitFarm()
     end)
 end
 
+-- ---------- attack loop ----------
+
 local function startAttackLoop()
     local interval = math.max(ATTACK_INTERVAL, ATTACK_MIN)
-
     attackThread = task.spawn(function()
-        while isAutofarming do
-            if currentTarget and AttackRemote then
+        while running do
+            if currentTarget and AttackRemote and not returning then
                 local character = LocalPlayer.Character
                 local myRoot    = character and character:FindFirstChild("HumanoidRootPart")
                 local hb        = currentTarget.hitbox
-                if myRoot and hb and hb.Parent then
+                if myRoot and hb and hb.Parent and not isDead(currentTarget) then
                     pcall(function()
                         local dir = (hb.Position - myRoot.Position).Unit
                         AttackRemote:FireServer(dir, hb)
@@ -228,29 +305,90 @@ local function startAttackLoop()
     end)
 end
 
-local function stopOrbitFarm()
-    cancelReturn()
-    if farmConnection then
-        farmConnection:Disconnect()
-        farmConnection = nil
-    end
-    attackThread  = nil
-    currentTarget = nil
-    lastPosition  = nil
-    angle         = 0
+-- ---------- rebirth loop ----------
+
+local function startRebirthLoop()
+    rebirthThread = task.spawn(function()
+        while running do
+            pcall(function() RebirthRemote:FireServer() end)
+            task.wait(REBIRTH_INTERVAL)
+        end
+    end)
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.K then
-        isAutofarming = not isAutofarming
-        if isAutofarming then
-            print(("Orbit Autofarm: ACTIVE — zone (-4, 2, -5) r=%d, atk %.2fs"):format(ZONE_RADIUS, math.max(ATTACK_INTERVAL, ATTACK_MIN)))
-            startOrbitFarm()
-            startAttackLoop()
-        else
-            print("Orbit Autofarm: INACTIVE")
-            stopOrbitFarm()
+-- ---------- server hop ----------
+
+local function isServerEmpty()
+    local container = workspace:FindFirstChild("PlayersContainer")
+    if not container then return true end
+    for _, folder in ipairs(container:GetChildren()) do
+        if folder.Name ~= LocalPlayer.Name then return false end
+    end
+    return true
+end
+
+local function findOtherServer()
+    for _ = 1, HOP_MAX_ATTEMPTS do
+        local ok, pages = pcall(function()
+            return TeleportService:GetSortedAsync(false, 100)
+        end)
+        if ok and pages then
+            local pageOk, page = pcall(function() return pages:GetCurrentPage() end)
+            if pageOk and page then
+                for _, entry in ipairs(page) do
+                    if entry.jobId and entry.jobId ~= game.JobId then
+                        return entry.jobId, entry.placeId or game.PlaceId
+                    end
+                end
+                pcall(function() pages:AdvanceToNextPageAsync() end)
+            end
         end
+        task.wait(HOP_RETRY_DELAY)
+    end
+    return nil, nil
+end
+
+local function hopServer()
+    local jobId, placeId = findOtherServer()
+    if not jobId then task.wait(HOP_RETRY_DELAY); return end
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(placeId or game.PlaceId, jobId, LocalPlayer)
+    end)
+end
+
+local function startHopWatchdog()
+    hopThread = task.spawn(function()
+        local emptySince = nil
+        while running do
+            task.wait(HOP_CHECK_INTERVAL)
+            if isServerEmpty() then
+                emptySince = emptySince or os.clock()
+                if os.clock() - emptySince >= HOP_EMPTY_SECONDS then
+                    if DEBUG then print("[Luis] server empty, hopping") end
+                    hopServer()
+                    emptySince = nil
+                end
+            else
+                emptySince = nil
+            end
+        end
+    end)
+end
+
+-- ---------- boot ----------
+
+running = true
+startOrbitFarm()
+startAttackLoop()
+startRebirthLoop()
+startHopWatchdog()
+
+print(("[Luis] AUTO — zone (-4,2,-5) r=%d, orbit spd %.0f, return spd %.0f, rebirth %ds, hop %ds")
+    :format(ZONE_RADIUS, ORBIT_SPEED, RETURN_SPEED, REBIRTH_INTERVAL, HOP_EMPTY_SECONDS))
+
+Players.PlayerRemoving:Connect(function(p)
+    if p == LocalPlayer then
+        running = false
+        if farmConnection then farmConnection:Disconnect() end
     end
 end)
